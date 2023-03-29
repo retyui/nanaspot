@@ -1,0 +1,79 @@
+name: Nitro build
+
+on:
+  workflow_dispatch:
+    inputs:
+      checkoutRef:
+        description: 'ref to checkout'
+        required: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.inputs.checkoutRef }}
+  cancel-in-progress: true # Cancel previous runs of this workflow
+
+jobs:
+  build-android:
+    name: Android Build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.inputs.checkoutRef }}
+          token: ${{ secrets.CHECKOUT_TOKEN }}
+          repository: ${{ vars.CHECKOUT_REPOSITORY }}
+          fetch-depth: 0
+
+      - uses: nitro-build/github-action-nitro-android@v1
+        id: nitro
+        env:
+          NITRO_API_KEY: ${{ secrets.NITRO_API_KEY }}
+        with:
+          debug: yes
+          flavor: ${{ vars.NITRO_ANDROID_FLAVOR }}
+          root-directory: ${{ vars.NITRO_ROOT_DIRECTORY }}
+
+      - name: Store artifacts on GitHub
+        uses: actions/upload-artifact@v3
+        with:
+          path: ${{ steps.nitro.outputs.nitro-app-path }}
+
+      - name: run maestro
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          arch: x86_64
+          avd-name: emulator
+          script: |
+            set -e
+            set -x
+            curl -Ls "https://get.maestro.mobile.dev" | bash
+            adb install "${{ steps.nitro.outputs.nitro-app-path }}" 
+            cd "${{ vars.NITRO_ROOT_DIRECTORY }}/../mobile-e2e"
+            yarn test-android-staging ./flows/sign-in-email-and-password.yaml -e USE_CUSTOM_BE=PRE_PROD
+
+  build-ios:
+    name: iOS Build (simulator)
+    runs-on: macos-12
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.inputs.checkoutRef }}
+          token: ${{ secrets.CHECKOUT_TOKEN }}
+          repository: ${{ vars.CHECKOUT_REPOSITORY }}
+          fetch-depth: 0
+
+      - run: echo "2.7.6" > .ruby-version
+
+      - uses: nitro-build/github-action-nitro-ios@v1
+        id: nitro
+        env:
+          NITRO_API_KEY: ${{ secrets.NITRO_API_KEY }}
+        with:
+          debug: yes
+          scheme: ${{ vars.NITRO_IOS_SCHEME }}
+          root-directory: ${{ vars.NITRO_ROOT_DIRECTORY }}
+
+      - name: Store artifacts on GitHub
+        uses: actions/upload-artifact@v3
+        with:
+          path: ${{ steps.nitro.outputs.nitro-app-path }}
