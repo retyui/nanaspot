@@ -27,6 +27,7 @@ jobs:
         id: nitro
         env:
           NITRO_API_KEY: ${{ secrets.NITRO_API_KEY }}
+          BETA_BUILD: true
         with:
           debug: yes
           flavor: ${{ vars.NITRO_ANDROID_FLAVOR }}
